@@ -1,0 +1,15 @@
+name = "svg-generator"
+main = "src/index.js"
+compatibility_date = "2023-03-14"
+
+kv_namespaces = [
+  { binding = "SVG_CACHE", id = "be70ef1d21094621b01e0473be3cd038", preview_id = "6061c663abfb44e5a74d987859936016" }
+]
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
+
+
+
+
