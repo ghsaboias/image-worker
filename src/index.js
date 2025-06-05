@@ -1,10 +1,40 @@
 export default {
 	async fetch(request, env) {
-		const { searchParams } = new URL(request.url);
-		const headline = searchParams.get('headline');
+		console.log(`[SVG] === WORKER STARTED ===`);
+		console.log(`[SVG] Request: ${request.method} ${request.url}`);
+
+		let headline;
+
+		// Check if this is a service binding call or HTTP request
+		if (request.headers.get('x-service-binding') === 'true') {
+			console.log(`[SVG] Service binding call detected`);
+			try {
+				const body = await request.json();
+				headline = body.headline;
+				console.log(`[SVG] Headline from service binding: ${headline}`);
+			} catch (error) {
+				console.error(`[SVG] Failed to parse service binding request:`, error);
+				return new Response('Invalid service binding request', {
+					status: 400,
+					headers: {
+						'x-error-type': 'service-binding-parse-error',
+					},
+				});
+			}
+		} else {
+			console.log(`[SVG] HTTP request detected`);
+			const { searchParams } = new URL(request.url);
+			headline = searchParams.get('headline');
+		}
 
 		if (!headline) {
-			return new Response('Please add a ?headline= parameter', { status: 400 });
+			console.error(`[SVG] No headline provided`);
+			return new Response('Headline is required', {
+				status: 400,
+				headers: {
+					'x-error-type': 'missing-headline',
+				},
+			});
 		}
 
 		// Check cache first
@@ -12,24 +42,38 @@ export default {
 		let cachedHtml = await env.SVG_CACHE.get(cacheKey);
 
 		if (cachedHtml) {
+			console.log(`[SVG] Cache hit for headline`);
 			return new Response(cachedHtml, {
 				headers: {
 					'Content-Type': 'text/html',
+					'Cache-Control': 'public, max-age=86400',
+					'Access-Control-Allow-Origin': '*',
+					'x-cache-status': 'hit',
 				},
 			});
 		}
 
+		console.log(`[SVG] Cache miss - generating new SVG`);
 		// Generate new SVG HTML
 		const html = generateSVGHTML(headline);
 
 		// Cache for 30 days
-		await env.SVG_CACHE.put(cacheKey, html, {
-			expirationTtl: 60 * 60 * 24 * 30,
-		});
+		try {
+			await env.SVG_CACHE.put(cacheKey, html, {
+				expirationTtl: 60 * 60 * 24 * 30,
+			});
+			console.log(`[SVG] Successfully cached new SVG`);
+		} catch (error) {
+			console.error(`[SVG] Failed to cache SVG:`, error);
+			// Continue anyway - we can still return the generated HTML
+		}
 
 		return new Response(html, {
 			headers: {
 				'Content-Type': 'text/html',
+				'Cache-Control': 'public, max-age=86400',
+				'Access-Control-Allow-Origin': '*',
+				'x-cache-status': 'miss',
 			},
 		});
 	},
